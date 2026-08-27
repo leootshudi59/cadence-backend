@@ -1,0 +1,12 @@
+allowBuilds:
+  "@prisma/client": true
+  "@prisma/engines": true
+  "@scarf/scarf": false
+  "@swc/core": true
+  esbuild: true
+  prisma: true
+minimumReleaseAgeExclude:
+  - "@nestjs/common@11.2.3"
+  - "@nestjs/core@11.2.3"
+  - "@nestjs/platform-express@11.2.3"
+  - "@nestjs/testing@11.2.3"

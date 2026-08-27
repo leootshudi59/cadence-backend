@@ -1,0 +1,556 @@
+// ─────────────────────────────────────────────────────────────────────────
+// ⚠️  RLS WARNING — read before adding any table
+//
+// Supabase only auto-enables Row Level Security for tables created through
+// its dashboard Table Editor. Every table created via `prisma migrate`
+// starts with RLS OFF and must be explicitly enabled:
+//
+//   ALTER TABLE "table_name" ENABLE ROW LEVEL SECURITY;
+//
+// ...plus the policies themselves, before it ships. This project stores
+// identity documents and health data — a table shipped without RLS is a
+// data leak. See src/repositories/rls.ts and supabase/migrations for the
+// connection-role half of this mechanism.
+// ─────────────────────────────────────────────────────────────────────────
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum DietaryKind {
+  DIET
+  ALLERGY
+  INTOLERANCE
+  RELIGIOUS
+}
+
+enum DietarySeverity {
+  PREFERENCE
+  STRICT
+  LIFE_THREATENING
+}
+
+enum FamilyRelation {
+  PARENT_OF
+  GUARDIAN_OF
+  SPOUSE_OF
+  SIBLING_OF
+}
+
+enum DocumentType {
+  PASSPORT
+  NATIONAL_ID
+  VISA
+  RESIDENCE_PERMIT
+  DRIVING_LICENSE
+  IDP
+  INSURANCE
+  EHIC
+  VACCINATION
+  MINOR_EXIT_AUTHORIZATION
+  OTHER
+}
+
+enum TripStatus {
+  DRAFT
+  PLANNED
+  ONGOING
+  PAST
+  CANCELLED
+}
+
+enum ParticipantRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+}
+
+enum BookingType {
+  FLIGHT
+  TRAIN
+  BUS
+  FERRY
+  CAR_RENTAL
+  TRANSFER
+  ACCOMMODATION
+  RESTAURANT
+  ACTIVITY
+  OTHER
+}
+
+enum BookingStatus {
+  CONFIRMED
+  PENDING
+  CANCELLED
+}
+
+enum VerificationStatus {
+  VERIFIED
+  NEEDS_REVIEW
+}
+
+enum PlaceCategory {
+  AIRPORT
+  STATION
+  PORT
+  HOTEL
+  RESTAURANT
+  MUSEUM
+  ATTRACTION
+  OTHER
+}
+
+enum PlaceProvider {
+  OSM
+  MANUAL
+}
+
+enum TravelMode {
+  FOOT
+  CAR
+  TRANSIT
+  BIKE
+}
+
+enum ExpenseCategory {
+  TRANSPORT
+  ACCOMMODATION
+  FOOD
+  ACTIVITY
+  SHOPPING
+  OTHER
+}
+
+enum SplitMode {
+  EQUAL
+  SHARES
+  EXACT
+  PERCENT
+}
+
+enum IngestionSource {
+  EMAIL
+  PDF
+  IMAGE
+  TEXT
+}
+
+enum IngestionStatus {
+  PENDING
+  PROCESSING
+  EXTRACTED
+  NEEDS_REVIEW
+  FAILED
+  DISCARDED
+}
+
+model Profile {
+  id             String   @id @map("id") @db.Uuid
+  email          String   @unique(map: "profiles_email_key") @map("email")
+  displayName    String   @map("display_name")
+  avatarUrl      String?  @map("avatar_url")
+  locale         String   @default("fr-FR") @map("locale")
+  homeIanaZone   String   @default("Europe/Paris") @map("home_iana_zone")
+  baseCurrency   String   @default("EUR") @map("base_currency") @db.Char(3)
+  ingestionAlias String?  @unique(map: "profiles_ingestion_alias_key") @map("ingestion_alias")
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  ownedTravelers TravelerProfile[] @relation("TravelerOwner")
+  traveler       TravelerProfile?  @relation("TravelerAccount")
+  trips          Trip[]
+  rawIngestions  RawIngestion[]
+
+  @@map("profiles")
+}
+
+model TravelerProfile {
+  id                        String    @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  ownerId                   String    @map("owner_id") @db.Uuid
+  accountId                 String?   @unique(map: "traveler_profiles_account_id_key") @map("account_id") @db.Uuid
+  firstName                 String    @map("first_name")
+  lastName                  String    @map("last_name")
+  birthDate                 DateTime? @map("birth_date") @db.Date
+  nationality               String?   @map("nationality") @db.Char(2)
+  residenceCountry          String?   @map("residence_country") @db.Char(2)
+  earliestWakeTime          DateTime? @map("earliest_wake_time") @db.Time(6)
+  latestEndTime             DateTime? @map("latest_end_time") @db.Time(6)
+  maxActivitiesPerDay       Int?      @map("max_activities_per_day")
+  breakMinutesPerDay        Int?      @map("break_minutes_per_day")
+  napRequired               Boolean   @default(false) @map("nap_required")
+  napWindowStart            DateTime? @map("nap_window_start") @db.Time(6)
+  napWindowEnd              DateTime? @map("nap_window_end") @db.Time(6)
+  prefersLocalOverTouristic Boolean   @default(false) @map("prefers_local_over_touristic")
+  notes                     String?   @map("notes")
+  createdAt                 DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                 DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  owner              Profile              @relation("TravelerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  account            Profile?             @relation("TravelerAccount", fields: [accountId], references: [id], onDelete: SetNull)
+  health             TravelerHealth?
+  dietaryConstraints TravelerDietary[]
+  medications        TravelerMedication[]
+  familyLinksFrom    FamilyLink[]         @relation("FamilyLinkFrom")
+  familyLinksTo      FamilyLink[]         @relation("FamilyLinkTo")
+  travelDocuments    TravelDocument[]
+  tripParticipants   TripParticipant[]
+  bookingTravelers   BookingTraveler[]
+  expensesPaid       Expense[]
+  expenseShares      ExpenseShare[]
+
+  @@index([ownerId], map: "traveler_profiles_owner_id_idx")
+  @@map("traveler_profiles")
+}
+
+model TravelerHealth {
+  id              String   @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  travelerId      String   @unique(map: "traveler_health_traveler_id_key") @map("traveler_id") @db.Uuid
+  wheelchairUser  Boolean  @default(false) @map("wheelchair_user")
+  maxWalkKmPerDay Decimal? @map("max_walk_km_per_day") @db.Decimal(5, 2)
+  stairsOk        Boolean  @default(true) @map("stairs_ok")
+  needsElevator   Boolean  @default(false) @map("needs_elevator")
+  mobilityNotes   String?  @map("mobility_notes")
+  conditions      Json     @default("[]") @map("conditions") @db.JsonB
+  createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  traveler TravelerProfile @relation(fields: [travelerId], references: [id], onDelete: Cascade)
+
+  @@map("traveler_health")
+}
+
+model TravelerDietary {
+  id         String          @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  travelerId String          @map("traveler_id") @db.Uuid
+  kind       DietaryKind     @map("kind")
+  label      String          @map("label")
+  severity   DietarySeverity @map("severity")
+  notes      String?         @map("notes")
+  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  traveler TravelerProfile @relation(fields: [travelerId], references: [id], onDelete: Cascade)
+
+  @@unique([travelerId, kind, label], map: "traveler_dietary_traveler_id_kind_label_key")
+  @@map("traveler_dietary")
+}
+
+model TravelerMedication {
+  id                         String   @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  travelerId                 String   @map("traveler_id") @db.Uuid
+  label                      String   @map("label")
+  dosesPerDay                Decimal  @map("doses_per_day") @db.Decimal(5, 2)
+  unitsOnHand                Int?     @map("units_on_hand")
+  requiresRefrigeration      Boolean  @default(false) @map("requires_refrigeration")
+  requiresPrescriptionAbroad Boolean  @default(false) @map("requires_prescription_abroad")
+  notes                      String?  @map("notes")
+  createdAt                  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt                  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  traveler TravelerProfile @relation(fields: [travelerId], references: [id], onDelete: Cascade)
+
+  @@map("traveler_medications")
+}
+
+model FamilyLink {
+  id             String         @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  fromTravelerId String         @map("from_traveler_id") @db.Uuid
+  toTravelerId   String         @map("to_traveler_id") @db.Uuid
+  relation       FamilyRelation @map("relation")
+  createdAt      DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  fromTraveler TravelerProfile @relation("FamilyLinkFrom", fields: [fromTravelerId], references: [id], onDelete: Cascade)
+  toTraveler   TravelerProfile @relation("FamilyLinkTo", fields: [toTravelerId], references: [id], onDelete: Cascade)
+
+  @@unique([fromTravelerId, toTravelerId, relation], map: "family_links_from_traveler_id_to_traveler_id_relation_key")
+  @@map("family_links")
+}
+
+model TravelDocument {
+  id               String       @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  travelerId       String       @map("traveler_id") @db.Uuid
+  type             DocumentType @map("type")
+  label            String?      @map("label")
+  issuingCountry   String?      @map("issuing_country") @db.Char(2)
+  numberCiphertext Bytes?       @map("number_ciphertext") @db.ByteA
+  numberIv         Bytes?       @map("number_iv") @db.ByteA
+  numberSalt       Bytes?       @map("number_salt") @db.ByteA
+  issuedOn         DateTime?    @map("issued_on") @db.Date
+  expiresOn        DateTime?    @map("expires_on") @db.Date
+  storagePath      String?      @map("storage_path")
+  storageIv        Bytes?       @map("storage_iv") @db.ByteA
+  storageSalt      Bytes?       @map("storage_salt") @db.ByteA
+  coversCountries  String[]     @default([]) @map("covers_countries") @db.Char(2)
+  createdAt        DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  traveler TravelerProfile @relation(fields: [travelerId], references: [id], onDelete: Cascade)
+
+  @@index([travelerId, type], map: "travel_documents_traveler_id_type_idx")
+  @@index([expiresOn], map: "travel_documents_expires_on_idx")
+  @@map("travel_documents")
+}
+
+model Trip {
+  id                 String     @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  ownerId            String     @map("owner_id") @db.Uuid
+  title              String     @map("title")
+  destinationCity    String     @map("destination_city")
+  destinationCountry String     @map("destination_country") @db.Char(2)
+  placeId            String?    @map("place_id") @db.Uuid
+  ianaZone           String     @map("iana_zone")
+  startDate          DateTime   @map("start_date") @db.Date
+  endDate            DateTime   @map("end_date") @db.Date
+  status             TripStatus @map("status")
+  budgetAmount       Decimal?   @map("budget_amount") @db.Decimal(14, 2)
+  budgetCurrency     String?    @map("budget_currency") @db.Char(3)
+  baseCurrency       String     @default("EUR") @map("base_currency") @db.Char(3)
+  coverImageUrl      String?    @map("cover_image_url")
+  createdAt          DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  owner         Profile           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  place         Place?            @relation("TripDestination", fields: [placeId], references: [id], onDelete: SetNull)
+  participants  TripParticipant[]
+  bookings      Booking[]
+  expenses      Expense[]
+  rawIngestions RawIngestion[]
+
+  @@index([ownerId, startDate], map: "trips_owner_id_start_date_idx")
+  @@map("trips")
+}
+
+model TripParticipant {
+  id               String          @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  tripId           String          @map("trip_id") @db.Uuid
+  travelerId       String          @map("traveler_id") @db.Uuid
+  role             ParticipantRole @map("role")
+  inviteStatus     InviteStatus    @map("invite_status")
+  canViewDocuments Boolean         @default(false) @map("can_view_documents")
+  invitedAt        DateTime        @map("invited_at") @db.Timestamptz(6)
+  respondedAt      DateTime?       @map("responded_at") @db.Timestamptz(6)
+
+  trip     Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  traveler TravelerProfile @relation(fields: [travelerId], references: [id], onDelete: Cascade)
+
+  @@unique([tripId, travelerId], map: "trip_participants_trip_id_traveler_id_key")
+  @@map("trip_participants")
+}
+
+model Booking {
+  id                   String             @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  tripId               String             @map("trip_id") @db.Uuid
+  type                 BookingType        @map("type")
+  title                String             @map("title")
+  providerName         String?            @map("provider_name")
+  confirmationNumber   String?            @map("confirmation_number")
+  status               BookingStatus      @map("status")
+  startAt              DateTime           @map("start_at") @db.Timestamptz(6)
+  startIanaZone        String             @map("start_iana_zone")
+  startPlaceId         String?            @map("start_place_id") @db.Uuid
+  endAt                DateTime?          @map("end_at") @db.Timestamptz(6)
+  endIanaZone          String?            @map("end_iana_zone")
+  endPlaceId           String?            @map("end_place_id") @db.Uuid
+  details              Json               @default("{}") @map("details") @db.JsonB
+  verificationStatus   VerificationStatus @map("verification_status")
+  extractionConfidence Decimal?           @map("extraction_confidence") @db.Decimal(4, 3)
+  rawIngestionId       String?            @map("raw_ingestion_id") @db.Uuid
+  createdAt            DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trip         Trip              @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  startPlace   Place?            @relation("BookingStartPlace", fields: [startPlaceId], references: [id], onDelete: SetNull)
+  endPlace     Place?            @relation("BookingEndPlace", fields: [endPlaceId], references: [id], onDelete: SetNull)
+  rawIngestion RawIngestion?     @relation(fields: [rawIngestionId], references: [id], onDelete: SetNull)
+  travelers    BookingTraveler[]
+  expense      Expense?
+
+  @@index([tripId, startAt], map: "bookings_trip_id_start_at_idx")
+  @@map("bookings")
+}
+
+model BookingTraveler {
+  id           String  @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  bookingId    String  @map("booking_id") @db.Uuid
+  travelerId   String  @map("traveler_id") @db.Uuid
+  seat         String? @map("seat")
+  ticketNumber String? @map("ticket_number")
+
+  booking  Booking         @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  traveler TravelerProfile @relation(fields: [travelerId], references: [id], onDelete: Cascade)
+
+  @@unique([bookingId, travelerId], map: "booking_travelers_booking_id_traveler_id_key")
+  @@map("booking_travelers")
+}
+
+model Place {
+  id                   String        @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  name                 String        @map("name")
+  address              String?       @map("address")
+  city                 String?       @map("city")
+  country              String?       @map("country") @db.Char(2)
+  lat                  Decimal       @map("lat") @db.Decimal(9, 6)
+  lng                  Decimal       @map("lng") @db.Decimal(9, 6)
+  ianaZone             String        @map("iana_zone")
+  iataCode             String?       @map("iata_code")
+  category             PlaceCategory @map("category")
+  provider             PlaceProvider @map("provider")
+  providerPlaceId      String?       @map("provider_place_id")
+  openingHours         Json?         @map("opening_hours") @db.JsonB
+  seasonalClosure      Json?         @map("seasonal_closure") @db.JsonB
+  requiresBooking      Boolean?      @map("requires_booking")
+  wheelchairAccessible Boolean?      @map("wheelchair_accessible")
+  hasStairs            Boolean?      @map("has_stairs")
+  indoorWalkMarginM    Int           @default(0) @map("indoor_walk_margin_m")
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trips         Trip[]     @relation("TripDestination")
+  bookingStarts Booking[]  @relation("BookingStartPlace")
+  bookingEnds   Booking[]  @relation("BookingEndPlace")
+  routeLegsFrom RouteLeg[] @relation("RouteLegFrom")
+  routeLegsTo   RouteLeg[] @relation("RouteLegTo")
+
+  @@unique([provider, providerPlaceId], map: "places_provider_provider_place_id_key")
+  @@index([iataCode], map: "places_iata_code_idx")
+  @@map("places")
+}
+
+model RouteLeg {
+  id          String     @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  fromPlaceId String     @map("from_place_id") @db.Uuid
+  toPlaceId   String     @map("to_place_id") @db.Uuid
+  mode        TravelMode @map("mode")
+  distanceM   Int        @map("distance_m")
+  durationS   Int        @map("duration_s")
+  geometry    Json?      @map("geometry") @db.JsonB
+  provider    String     @default("openrouteservice") @map("provider")
+  computedAt  DateTime   @map("computed_at") @db.Timestamptz(6)
+  expiresAt   DateTime?  @map("expires_at") @db.Timestamptz(6)
+
+  fromPlace Place @relation("RouteLegFrom", fields: [fromPlaceId], references: [id], onDelete: Cascade)
+  toPlace   Place @relation("RouteLegTo", fields: [toPlaceId], references: [id], onDelete: Cascade)
+
+  @@unique([fromPlaceId, toPlaceId, mode], map: "route_legs_from_place_id_to_place_id_mode_key")
+  @@map("route_legs")
+}
+
+model CountryRule {
+  id                             String    @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  nationalityCountry             String    @map("nationality_country") @db.Char(2)
+  destinationCountry             String    @map("destination_country") @db.Char(2)
+  passportMinValidityMonths      Int       @default(6) @map("passport_min_validity_months")
+  visaRequired                   Boolean   @map("visa_required")
+  visaNotes                      String?   @map("visa_notes")
+  minorExitAuthorizationRequired Boolean   @default(false) @map("minor_exit_authorization_required")
+  idpRequired                    Boolean   @default(false) @map("idp_required")
+  ehicAccepted                   Boolean   @default(false) @map("ehic_accepted")
+  requiredVaccinations           String[]  @default([]) @map("required_vaccinations")
+  sourceUrl                      String?   @map("source_url")
+  validFrom                      DateTime? @map("valid_from") @db.Date
+  validTo                        DateTime? @map("valid_to") @db.Date
+  updatedAt                      DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([nationalityCountry, destinationCountry], map: "country_rules_nationality_country_destination_country_key")
+  @@map("country_rules")
+}
+
+model PublicHoliday {
+  id      String   @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  country String   @map("country") @db.Char(2)
+  region  String?  @map("region")
+  date    DateTime @map("date") @db.Date
+  name    String   @map("name")
+  source  String?  @map("source")
+
+  @@unique([country, region, date], map: "public_holidays_country_region_date_key")
+  @@map("public_holidays")
+}
+
+model Expense {
+  id                 String          @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  tripId             String          @map("trip_id") @db.Uuid
+  bookingId          String?         @unique(map: "expenses_booking_id_key") @map("booking_id") @db.Uuid
+  payerTravelerId    String          @map("payer_traveler_id") @db.Uuid
+  category           ExpenseCategory @map("category")
+  label              String          @map("label")
+  amount             Decimal         @map("amount") @db.Decimal(14, 2)
+  currency           String          @map("currency") @db.Char(3)
+  fxRate             Decimal?        @map("fx_rate") @db.Decimal(18, 8)
+  amountBase         Decimal?        @map("amount_base") @db.Decimal(14, 2)
+  baseCurrency       String          @map("base_currency") @db.Char(3)
+  spentAt            DateTime        @map("spent_at") @db.Timestamptz(6)
+  ianaZone           String          @map("iana_zone")
+  splitMode          SplitMode       @map("split_mode")
+  settled            Boolean         @default(false) @map("settled")
+  receiptStoragePath String?         @map("receipt_storage_path")
+  createdAt          DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  trip          Trip            @relation(fields: [tripId], references: [id], onDelete: Cascade)
+  booking       Booking?        @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  payerTraveler TravelerProfile @relation(fields: [payerTravelerId], references: [id], onDelete: Restrict)
+  shares        ExpenseShare[]
+
+  @@index([tripId, spentAt], map: "expenses_trip_id_spent_at_idx")
+  @@map("expenses")
+}
+
+model ExpenseShare {
+  id             String    @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  expenseId      String    @map("expense_id") @db.Uuid
+  travelerId     String    @map("traveler_id") @db.Uuid
+  shareWeight    Decimal?  @map("share_weight") @db.Decimal(8, 4)
+  amountOwed     Decimal   @map("amount_owed") @db.Decimal(14, 2)
+  amountOwedBase Decimal?  @map("amount_owed_base") @db.Decimal(14, 2)
+  settledAt      DateTime? @map("settled_at") @db.Timestamptz(6)
+
+  expense  Expense         @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+  traveler TravelerProfile @relation(fields: [travelerId], references: [id], onDelete: Cascade)
+
+  @@unique([expenseId, travelerId], map: "expense_shares_expense_id_traveler_id_key")
+  @@map("expense_shares")
+}
+
+model RawIngestion {
+  id             String          @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  ownerId        String          @map("owner_id") @db.Uuid
+  tripId         String?         @map("trip_id") @db.Uuid
+  source         IngestionSource @map("source")
+  senderAddress  String?         @map("sender_address")
+  receivedAt     DateTime        @map("received_at") @db.Timestamptz(6)
+  contentType    String?         @map("content_type")
+  rawStoragePath String?         @map("raw_storage_path")
+  rawText        String?         @map("raw_text")
+  checksum       String          @map("checksum")
+  status         IngestionStatus @map("status")
+  modelId        String?         @map("model_id")
+  promptVersion  String?         @map("prompt_version")
+  extractedJson  Json?           @map("extracted_json") @db.JsonB
+  confidence     Decimal?        @map("confidence") @db.Decimal(4, 3)
+  attempts       Int             @default(0) @map("attempts")
+  error          String?         @map("error")
+  processedAt    DateTime?       @map("processed_at") @db.Timestamptz(6)
+  createdAt      DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  owner    Profile   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  trip     Trip?     @relation(fields: [tripId], references: [id], onDelete: SetNull)
+  bookings Booking[]
+
+  @@unique([ownerId, checksum], map: "raw_ingestions_owner_id_checksum_key")
+  @@index([status, receivedAt], map: "raw_ingestions_status_received_at_idx")
+  @@map("raw_ingestions")
+}

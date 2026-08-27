@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    // Bookings and traveler data are handled as arrays and optional fields
+    // that round-trip through JSONB columns; these two catch the two most
+    // common bugs in that shape (silent undefined on index access, optional
+    // vs. missing property drift) at compile time instead of at runtime.
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "useDefineForClassFields": false,
+    "moduleDetection": "force",
+    "skipLibCheck": true,
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "ignoreDeprecations": "6.0",
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "types": ["node"]
+  },
+  "include": ["src"]
+}
