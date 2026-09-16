@@ -1,52 +1,28 @@
 import { Injectable } from "@nestjs/common";
+import type { Profile } from "../../generated/prisma/client";
 import type {
   IProfileRepository,
   PutProfilePersistenceInput,
 } from "../interfaces/IProfileRepository";
-import type { ProfileRecord, RlsTransactionClient } from "../types";
+import type { RlsTransactionClient } from "../types";
 import { rethrowPersistenceError } from "./prisma-errors";
 
-function toProfileRecord(record: {
-  id: string;
-  email: string;
-  displayName: string;
-  avatarUrl: string | null;
-  locale: string;
-  homeIanaZone: string;
-  baseCurrency: string;
-  createdAt: Date;
-  updatedAt: Date;
-}): ProfileRecord {
-  return {
-    id: record.id,
-    email: record.email,
-    displayName: record.displayName,
-    avatarUrl: record.avatarUrl,
-    locale: record.locale,
-    homeIanaZone: record.homeIanaZone,
-    baseCurrency: record.baseCurrency,
-    createdAt: record.createdAt,
-    updatedAt: record.updatedAt,
-  };
-}
 
 @Injectable()
 export class PrismaProfileRepository implements IProfileRepository {
   findById(
     transaction: RlsTransactionClient,
     accountId: string,
-  ): Promise<ProfileRecord | null> {
-    return transaction.profile
-      .findUnique({ where: { id: accountId } })
-      .then((record) => (record === null ? null : toProfileRecord(record)));
+  ): Promise<Profile | null> {
+    return transaction.profile.findUnique({ where: { id: accountId } })
   }
 
   async put(
     transaction: RlsTransactionClient,
     input: PutProfilePersistenceInput,
-  ): Promise<ProfileRecord> {
+  ): Promise<Profile> {
     try {
-      const record = await transaction.profile.upsert({
+      return await transaction.profile.upsert({
         where: { id: input.accountId },
         create: {
           id: input.accountId,
@@ -66,7 +42,6 @@ export class PrismaProfileRepository implements IProfileRepository {
           baseCurrency: input.baseCurrency,
         },
       });
-      return toProfileRecord(record);
     } catch (error) {
       rethrowPersistenceError(error);
     }

@@ -1,4 +1,5 @@
-import type { ProfileRecord, RlsTransactionClient } from "../types";
+import type { Profile } from "../../generated/prisma/client";
+import type { RlsTransactionClient } from "../types";
 
 export interface PutProfilePersistenceInput {
   accountId: string;
@@ -14,10 +15,10 @@ export interface IProfileRepository {
   findById(
     transaction: RlsTransactionClient,
     accountId: string,
-  ): Promise<ProfileRecord | null>;
+  ): Promise<Profile | null>;
 
   put(
     transaction: RlsTransactionClient,
     input: PutProfilePersistenceInput,
-  ): Promise<ProfileRecord>;
+  ): Promise<Profile>;
 }

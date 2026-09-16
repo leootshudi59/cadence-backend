@@ -1,7 +1,7 @@
 import type { StoredDate } from "../../domain/time";
+import type { TripParticipant } from "../../generated/prisma/client";
 import type {
   InviteStatusValue,
-  ParticipantRecord,
   ParticipantRoleValue,
   RlsTransactionClient,
 } from "../types";
@@ -27,25 +27,25 @@ export interface IParticipantRepository {
   create(
     transaction: RlsTransactionClient,
     input: ParticipantPersistenceInput,
-  ): Promise<ParticipantRecord>;
+  ): Promise<TripParticipant>;
 
   findAll(
     transaction: RlsTransactionClient,
     tripId: string,
-  ): Promise<ParticipantRecord[]>;
+  ): Promise<TripParticipant[]>;
 
   findById(
     transaction: RlsTransactionClient,
     tripId: string,
     participantId: string,
-  ): Promise<ParticipantRecord | null>;
+  ): Promise<TripParticipant | null>;
 
   update(
     transaction: RlsTransactionClient,
     tripId: string,
     participantId: string,
     input: ParticipantUpdatePersistenceInput,
-  ): Promise<ParticipantRecord | null>;
+  ): Promise<TripParticipant | null>;
 
   delete(
     transaction: RlsTransactionClient,

@@ -1,8 +1,6 @@
 import { Injectable } from "@nestjs/common";
-import {
-  TripStatus as PrismaTripStatus,
-  type Trip as PrismaTrip,
-} from "../../generated/prisma";
+import { TripStatus as PrismaTripStatus } from "../../generated/prisma";
+import type { Trip } from "../../generated/prisma/client";
 import type {
   ITripRepository,
   TripPersistenceInput,
@@ -10,11 +8,14 @@ import type {
 } from "../interfaces/ITripRepository";
 import type {
   RlsTransactionClient,
-  TripRecord,
   TripStatusValue,
 } from "../types";
 import { rethrowPersistenceError } from "./prisma-errors";
 
+/**
+ * Maps the application-level trip status values to the corresponding
+ * Prisma enum values expected by PostgreSQL.
+ */
 const PRISMA_TRIP_STATUS: Record<TripStatusValue, PrismaTripStatus> = {
   draft: PrismaTripStatus.DRAFT,
   planned: PrismaTripStatus.PLANNED,
@@ -23,64 +24,78 @@ const PRISMA_TRIP_STATUS: Record<TripStatusValue, PrismaTripStatus> = {
   cancelled: PrismaTripStatus.CANCELLED,
 };
 
-const TRIP_STATUS: Record<PrismaTripStatus, TripStatusValue> = {
-  DRAFT: "draft",
-  PLANNED: "planned",
-  ONGOING: "ongoing",
-  PAST: "past",
-  CANCELLED: "cancelled",
-};
-
-function toTripRecord(record: PrismaTrip | null): TripRecord | null {
-  if (record === null) return null;
-  return {
-    ...record,
-    status: TRIP_STATUS[record.status],
-    budgetAmount: record.budgetAmount?.toString() ?? null,
-  };
-}
-
 @Injectable()
 export class PrismaTripRepository implements ITripRepository {
+  /**
+   * Creates a trip and returns the Prisma Trip model directly.
+   *
+   * The application-level trip status is converted to the corresponding
+   * Prisma enum before persistence.
+   */
   async create(
     transaction: RlsTransactionClient,
     input: TripPersistenceInput,
-  ): Promise<TripRecord> {
+  ): Promise<Trip> {
     try {
-      const record = await transaction.trip.create({
-        data: { ...input, status: PRISMA_TRIP_STATUS[input.status] },
+      return await transaction.trip.create({
+        data: {
+          ...input,
+          status: PRISMA_TRIP_STATUS[input.status],
+        },
       });
-      return toTripRecord(record)!;
     } catch (error) {
       rethrowPersistenceError(error);
     }
   }
 
-  findAll(transaction: RlsTransactionClient): Promise<TripRecord[]> {
-    return transaction.trip
-      .findMany({ orderBy: { startDate: "asc" } })
-      .then((records) => records.map((record) => toTripRecord(record)!));
+  /**
+   * Returns every trip visible through the current RLS transaction,
+   * ordered chronologically by start date.
+   */
+  findAll(transaction: RlsTransactionClient): Promise<Trip[]> {
+    return transaction.trip.findMany({
+      orderBy: {
+        startDate: "asc",
+      },
+    });
   }
 
+  /**
+   * Finds a trip by id through the current RLS transaction.
+   *
+   * @returns The Prisma Trip when found, otherwise null.
+   */
   findById(
     transaction: RlsTransactionClient,
     tripId: string,
-  ): Promise<TripRecord | null> {
-    return transaction.trip
-      .findUnique({ where: { id: tripId } })
-      .then(toTripRecord);
+  ): Promise<Trip | null> {
+    return transaction.trip.findUnique({
+      where: {
+        id: tripId,
+      },
+    });
   }
 
+  /**
+   * Updates the supplied fields of an existing trip.
+   *
+   * When the trip status is supplied, its application value is converted
+   * to the corresponding Prisma enum before persistence.
+   *
+   * @returns The updated Prisma Trip, or null when no row was updated.
+   */
   async update(
     transaction: RlsTransactionClient,
     tripId: string,
     input: TripUpdatePersistenceInput,
-  ): Promise<TripRecord | null> {
+  ): Promise<Trip | null> {
     const { status, ...rest } = input;
 
     try {
       const updated = await transaction.trip.updateMany({
-        where: { id: tripId },
+        where: {
+          id: tripId,
+        },
         data: {
           ...rest,
           ...(status === undefined
@@ -88,24 +103,36 @@ export class PrismaTripRepository implements ITripRepository {
             : { status: PRISMA_TRIP_STATUS[status] }),
         },
       });
+
       if (updated.count === 0) {
         return null;
       }
-      return transaction.trip
-        .findUnique({ where: { id: tripId } })
-        .then(toTripRecord);
+
+      return transaction.trip.findUnique({
+        where: {
+          id: tripId,
+        },
+      });
     } catch (error) {
       rethrowPersistenceError(error);
     }
   }
 
+  /**
+   * Deletes a trip through the current RLS transaction.
+   *
+   * @returns True when a trip was deleted, otherwise false.
+   */
   async delete(
     transaction: RlsTransactionClient,
     tripId: string,
   ): Promise<boolean> {
     const deleted = await transaction.trip.deleteMany({
-      where: { id: tripId },
+      where: {
+        id: tripId,
+      },
     });
+
     return deleted.count > 0;
   }
 }

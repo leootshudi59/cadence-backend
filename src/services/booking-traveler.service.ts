@@ -10,12 +10,12 @@ import type {
   CreateBookingTravelerBody,
   UpdateBookingTravelerBody,
 } from "../dtos/booking-traveler";
+import type { BookingTraveler } from "../generated/prisma/client";
 import type {
   BookingTravelerUpdatePersistenceInput,
   IBookingTravelerRepository,
 } from "../repositories/interfaces/IBookingTravelerRepository";
 import { RlsUnitOfWork } from "../repositories/rls-unit-of-work";
-import type { BookingTravelerRecord } from "../repositories/types";
 
 @Injectable()
 export class BookingTravelerService {
@@ -25,11 +25,23 @@ export class BookingTravelerService {
     private readonly rlsUnitOfWork: RlsUnitOfWork,
   ) {}
 
+  /**
+   * Assigns a traveler to a booking.
+   *
+   * Optional seat and ticket number values are normalized to null before
+   * persistence. The operation runs inside the authenticated RLS transaction.
+   *
+   * @param auth Verified authentication context.
+   * @param bookingId Booking identifier.
+   * @param input Validated traveler assignment payload.
+   * @returns The created Prisma BookingTraveler.
+   * @throws ConflictError When the traveler is already assigned to the booking.
+   */
   async create(
     auth: RequestAuth,
     bookingId: string,
     input: CreateBookingTravelerBody,
-  ): Promise<BookingTravelerRecord> {
+  ): Promise<BookingTraveler> {
     try {
       return await this.rlsUnitOfWork.execute(auth, (transaction) =>
         this.bookingTravelerRepository.create(transaction, {
@@ -41,47 +53,90 @@ export class BookingTravelerService {
       );
     } catch (error) {
       if (error instanceof UniqueConstraintViolationError) {
-        throw new ConflictError("Traveler is already assigned to this booking");
+        throw new ConflictError(
+          "Traveler is already assigned to this booking",
+        );
       }
+
       throw error;
     }
   }
 
+  /**
+   * Returns all traveler assignments attached to a booking.
+   *
+   * @param auth Verified authentication context.
+   * @param bookingId Booking identifier.
+   * @returns Prisma BookingTraveler objects visible through RLS.
+   */
   findAll(
     auth: RequestAuth,
     bookingId: string,
-  ): Promise<BookingTravelerRecord[]> {
+  ): Promise<BookingTraveler[]> {
     return this.rlsUnitOfWork.execute(auth, (transaction) =>
-      this.bookingTravelerRepository.findAll(transaction, bookingId),
+      this.bookingTravelerRepository.findAll(
+        transaction,
+        bookingId,
+      ),
     );
   }
 
+  /**
+   * Returns one traveler assignment belonging to a booking.
+   *
+   * @param auth Verified authentication context.
+   * @param bookingId Booking identifier.
+   * @param bookingTravelerId Booking traveler assignment identifier.
+   * @returns The matching Prisma BookingTraveler.
+   * @throws NotFoundError When the assignment does not exist or is not visible.
+   */
   findById(
     auth: RequestAuth,
     bookingId: string,
     bookingTravelerId: string,
-  ): Promise<BookingTravelerRecord> {
+  ): Promise<BookingTraveler> {
     return this.rlsUnitOfWork.execute(auth, async (transaction) => {
       const traveler = await this.bookingTravelerRepository.findById(
         transaction,
         bookingId,
         bookingTravelerId,
       );
-      if (traveler === null) throw new NotFoundError("Booking traveler");
+
+      if (traveler === null) {
+        throw new NotFoundError("Booking traveler");
+      }
+
       return traveler;
     });
   }
 
+  /**
+   * Updates the mutable fields of a traveler assignment.
+   *
+   * Only values explicitly provided by the API are forwarded to the
+   * repository, so omitted properties remain unchanged.
+   *
+   * @param auth Verified authentication context.
+   * @param bookingId Booking identifier.
+   * @param bookingTravelerId Booking traveler assignment identifier.
+   * @param input Validated partial update payload.
+   * @returns The updated Prisma BookingTraveler.
+   * @throws NotFoundError When the assignment does not exist or is not visible.
+   */
   update(
     auth: RequestAuth,
     bookingId: string,
     bookingTravelerId: string,
     input: UpdateBookingTravelerBody,
-  ): Promise<BookingTravelerRecord> {
-    const record: BookingTravelerUpdatePersistenceInput = {};
-    if (input.seat !== undefined) record.seat = input.seat;
+  ): Promise<BookingTraveler> {
+    const persistenceInput: BookingTravelerUpdatePersistenceInput = {};
+
+    if (input.seat !== undefined) {
+      persistenceInput.seat = input.seat;
+    }
+
     if (input.ticketNumber !== undefined) {
-      record.ticketNumber = input.ticketNumber;
+      persistenceInput.ticketNumber = input.ticketNumber;
     }
 
     return this.rlsUnitOfWork.execute(auth, async (transaction) => {
@@ -89,28 +144,40 @@ export class BookingTravelerService {
         transaction,
         bookingId,
         bookingTravelerId,
-        record,
+        persistenceInput,
       );
-      if (traveler === null) throw new NotFoundError("Booking traveler");
+
+      if (traveler === null) {
+        throw new NotFoundError("Booking traveler");
+      }
+
       return traveler;
     });
   }
 
+  /**
+   * Deletes a traveler assignment from a booking.
+   *
+   * @param auth Verified authentication context.
+   * @param bookingId Booking identifier.
+   * @param bookingTravelerId Booking traveler assignment identifier.
+   * @throws NotFoundError When no matching assignment could be deleted.
+   */
   delete(
     auth: RequestAuth,
     bookingId: string,
     bookingTravelerId: string,
   ): Promise<void> {
     return this.rlsUnitOfWork.execute(auth, async (transaction) => {
-      if (
-        !(await this.bookingTravelerRepository.delete(
-          transaction,
-          bookingId,
-          bookingTravelerId,
-        ))
-      ) {
+      const deleted = await this.bookingTravelerRepository.delete(
+        transaction,
+        bookingId,
+        bookingTravelerId,
+      );
+
+      if (!deleted) {
         throw new NotFoundError("Booking traveler");
       }
     });
   }
-}
+}3

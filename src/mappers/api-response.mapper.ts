@@ -12,16 +12,25 @@ import type { ParticipantResponse } from "../dtos/participant";
 import type { ProfileResponse } from "../dtos/profile";
 import type { TravelerResponse } from "../dtos/traveler";
 import type { TripResponse } from "../dtos/trip";
+import type { Booking, Profile, Trip } from "../generated/prisma/client";
+import {
+  BookingStatus as PrismaBookingStatus,
+  BookingType as PrismaBookingType,
+  InviteStatus as PrismaInviteStatus,
+  ParticipantRole as PrismaParticipantRole,
+  TripStatus as PrismaTripStatus,
+  VerificationStatus as PrismaVerificationStatus,
+} from "../generated/prisma";
+
 import type {
   BookingRecord,
   BookingTravelerRecord,
   ParticipantRecord,
-  ProfileRecord,
   TravelerRecord,
   TripRecord,
 } from "../repositories/types";
 
-export function profileResponse(record: ProfileRecord): ProfileResponse {
+export function profileResponse(record: Profile): ProfileResponse {
   return {
     id: record.id,
     email: record.email,
@@ -72,7 +81,14 @@ export function travelerResponse(record: TravelerRecord): TravelerResponse {
   };
 }
 
-export function tripResponse(record: TripRecord): TripResponse {
+const TRIP_STATUS_RESPONSE: Record<PrismaTripStatus, TripResponse["status"]> = {
+  DRAFT: "draft",
+  PLANNED: "planned",
+  ONGOING: "ongoing",
+  PAST: "past",
+  CANCELLED: "cancelled",
+};
+export function tripResponse(record: Trip): TripResponse {
   return {
     id: record.id,
     ownerId: record.ownerId,
@@ -83,8 +99,8 @@ export function tripResponse(record: TripRecord): TripResponse {
     ianaZone: record.ianaZone,
     startDate: storedDateToDateOnly(record.startDate),
     endDate: storedDateToDateOnly(record.endDate),
-    status: record.status,
-    budgetAmount: record.budgetAmount,
+    status: TRIP_STATUS_RESPONSE[record.status],
+    budgetAmount: record.budgetAmount?.toString() ?? null,
     budgetCurrency: record.budgetCurrency,
     baseCurrency: record.baseCurrency,
     coverImageUrl: record.coverImageUrl,
@@ -111,28 +127,80 @@ export function participantResponse(
   };
 }
 
-export function bookingResponse(record: BookingRecord): BookingResponse {
+const BOOKING_STATUS_RESPONSE: Record<
+  PrismaBookingStatus,
+  BookingResponse["status"]
+> = {
+  CONFIRMED: "confirmed",
+  PENDING: "pending",
+  CANCELLED: "cancelled",
+};
+
+const VERIFICATION_STATUS_RESPONSE: Record<
+  PrismaVerificationStatus,
+  BookingResponse["verificationStatus"]
+> = {
+  VERIFIED: "verified",
+  NEEDS_REVIEW: "needs-review",
+};
+export function bookingResponse(record: Booking): BookingResponse {
   const details = bookingDetailsStoredSchema.safeParse(record.details);
+
+  let type: BookingResponse["type"];
+
+  switch (record.type) {
+    case PrismaBookingType.FLIGHT:
+      type = "flight";
+      break;
+
+    case PrismaBookingType.TRAIN:
+      type = "train";
+      break;
+
+    case PrismaBookingType.ACCOMMODATION:
+      type = "lodging";
+      break;
+
+    case PrismaBookingType.ACTIVITY:
+      type = "activity";
+      break;
+
+    case PrismaBookingType.RESTAURANT:
+      type = "restaurant";
+      break;
+
+    case PrismaBookingType.TRANSFER:
+      type = "transport";
+      break;
+
+    default:
+      throw new Error(`Unsupported API booking type "${record.type}"`);
+  }
   return {
     id: record.id,
     tripId: record.tripId,
-    type: record.type,
+    type,
     title: record.title,
     providerName: record.providerName,
     confirmationNumber: record.confirmationNumber,
-    status: record.status,
+    status: BOOKING_STATUS_RESPONSE[record.status],
     startAt: storedDateToUtcIso(record.startAt),
     startIanaZone: record.startIanaZone,
     startPlaceId: record.startPlaceId,
-    endAt: record.endAt === null ? null : storedDateToUtcIso(record.endAt),
+    endAt:
+      record.endAt === null
+        ? null
+        : storedDateToUtcIso(record.endAt),
     endIanaZone: record.endIanaZone,
     endPlaceId: record.endPlaceId,
     details:
-      details.success && details.data.type === record.type
+      details.success && details.data.type === type
         ? details.data
         : null,
-    verificationStatus: record.verificationStatus,
-    extractionConfidence: record.extractionConfidence,
+    verificationStatus:
+      VERIFICATION_STATUS_RESPONSE[record.verificationStatus],
+    extractionConfidence:
+      record.extractionConfidence?.toNumber() ?? null,
     rawIngestionId: record.rawIngestionId,
     createdAt: storedDateToUtcIso(record.createdAt),
     updatedAt: storedDateToUtcIso(record.updatedAt),

@@ -1,5 +1,6 @@
+import type { TravelerProfile } from "../../generated/prisma/client";
 import type { StoredDate } from "../../domain/time";
-import type { RlsTransactionClient, TravelerRecord } from "../types";
+import type { RlsTransactionClient } from "../types";
 
 export interface TravelerPersistenceInput {
   accountId?: string | null;
@@ -29,20 +30,22 @@ export interface ITravelerRepository {
   create(
     transaction: RlsTransactionClient,
     input: TravelerPersistenceInput,
-  ): Promise<TravelerRecord>;
+  ): Promise<TravelerProfile>;
 
-  findAll(transaction: RlsTransactionClient): Promise<TravelerRecord[]>;
+  findAll(
+    transaction: RlsTransactionClient,
+  ): Promise<TravelerProfile[]>;
 
   findById(
     transaction: RlsTransactionClient,
     travelerId: string,
-  ): Promise<TravelerRecord | null>;
+  ): Promise<TravelerProfile | null>;
 
   update(
     transaction: RlsTransactionClient,
     travelerId: string,
     input: TravelerUpdatePersistenceInput,
-  ): Promise<TravelerRecord | null>;
+  ): Promise<TravelerProfile | null>;
 
   delete(
     transaction: RlsTransactionClient,
