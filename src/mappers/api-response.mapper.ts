@@ -12,7 +12,12 @@ import type { ParticipantResponse } from "../dtos/participant";
 import type { ProfileResponse } from "../dtos/profile";
 import type { TravelerResponse } from "../dtos/traveler";
 import type { TripResponse } from "../dtos/trip";
-import type { Booking, Profile, Trip } from "../generated/prisma/client";
+import type {
+  Booking,
+  Profile,
+  Trip,
+  TripParticipant,
+} from "../generated/prisma/client";
 import {
   BookingStatus as PrismaBookingStatus,
   BookingType as PrismaBookingType,
@@ -23,11 +28,8 @@ import {
 } from "../generated/prisma";
 
 import type {
-  BookingRecord,
   BookingTravelerRecord,
-  ParticipantRecord,
   TravelerRecord,
-  TripRecord,
 } from "../repositories/types";
 
 export function profileResponse(record: Profile): ProfileResponse {
@@ -109,15 +111,33 @@ export function tripResponse(record: Trip): TripResponse {
   };
 }
 
+const PARTICIPANT_ROLE_RESPONSE: Record<
+  PrismaParticipantRole,
+  ParticipantResponse["role"]
+> = {
+  OWNER: "owner",
+  EDITOR: "editor",
+  VIEWER: "viewer",
+};
+
+const INVITE_STATUS_RESPONSE: Record<
+  PrismaInviteStatus,
+  ParticipantResponse["inviteStatus"]
+> = {
+  PENDING: "pending",
+  ACCEPTED: "accepted",
+  DECLINED: "declined",
+};
+
 export function participantResponse(
-  record: ParticipantRecord,
+  record: TripParticipant,
 ): ParticipantResponse {
   return {
     id: record.id,
     tripId: record.tripId,
     travelerId: record.travelerId,
-    role: record.role,
-    inviteStatus: record.inviteStatus,
+    role: PARTICIPANT_ROLE_RESPONSE[record.role],
+    inviteStatus: INVITE_STATUS_RESPONSE[record.inviteStatus],
     canViewDocuments: record.canViewDocuments,
     invitedAt: storedDateToUtcIso(record.invitedAt),
     respondedAt:
@@ -187,20 +207,13 @@ export function bookingResponse(record: Booking): BookingResponse {
     startAt: storedDateToUtcIso(record.startAt),
     startIanaZone: record.startIanaZone,
     startPlaceId: record.startPlaceId,
-    endAt:
-      record.endAt === null
-        ? null
-        : storedDateToUtcIso(record.endAt),
+    endAt: record.endAt === null ? null : storedDateToUtcIso(record.endAt),
     endIanaZone: record.endIanaZone,
     endPlaceId: record.endPlaceId,
     details:
-      details.success && details.data.type === type
-        ? details.data
-        : null,
-    verificationStatus:
-      VERIFICATION_STATUS_RESPONSE[record.verificationStatus],
-    extractionConfidence:
-      record.extractionConfidence?.toNumber() ?? null,
+      details.success && details.data.type === type ? details.data : null,
+    verificationStatus: VERIFICATION_STATUS_RESPONSE[record.verificationStatus],
+    extractionConfidence: record.extractionConfidence?.toNumber() ?? null,
     rawIngestionId: record.rawIngestionId,
     createdAt: storedDateToUtcIso(record.createdAt),
     updatedAt: storedDateToUtcIso(record.updatedAt),

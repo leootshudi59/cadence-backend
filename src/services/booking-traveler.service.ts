@@ -53,9 +53,7 @@ export class BookingTravelerService {
       );
     } catch (error) {
       if (error instanceof UniqueConstraintViolationError) {
-        throw new ConflictError(
-          "Traveler is already assigned to this booking",
-        );
+        throw new ConflictError("Traveler is already assigned to this booking");
       }
 
       throw error;
@@ -69,15 +67,9 @@ export class BookingTravelerService {
    * @param bookingId Booking identifier.
    * @returns Prisma BookingTraveler objects visible through RLS.
    */
-  findAll(
-    auth: RequestAuth,
-    bookingId: string,
-  ): Promise<BookingTraveler[]> {
+  findAll(auth: RequestAuth, bookingId: string): Promise<BookingTraveler[]> {
     return this.rlsUnitOfWork.execute(auth, (transaction) =>
-      this.bookingTravelerRepository.findAll(
-        transaction,
-        bookingId,
-      ),
+      this.bookingTravelerRepository.findAll(transaction, bookingId),
     );
   }
 
@@ -180,4 +172,4 @@ export class BookingTravelerService {
       }
     });
   }
-}3
+}
