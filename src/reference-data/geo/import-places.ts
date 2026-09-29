@@ -56,11 +56,35 @@ type PlaceImportRunner = (
 
 export interface PlaceImportCliOptions {
   readonly database?: DisconnectablePrivilegedPlaceDatabase;
+  readonly createDatabase?: (
+    directUrl: string,
+  ) => DisconnectablePrivilegedPlaceDatabase;
+  readonly directUrl?: string;
   readonly runImport?: PlaceImportRunner;
   readonly writeSummary?: (message: string) => void;
 }
 
 const readUtf8Csv: CsvReader = (path) => readFile(path, "utf8");
+
+function requireDirectUrl(value: string | undefined): string {
+  const directUrl = value?.trim();
+
+  if (!directUrl) {
+    throw new Error(
+      "DIRECT_URL must be configured for the privileged place import",
+    );
+  }
+
+  return directUrl;
+}
+
+function createPrivilegedDatabase(
+  directUrl: string,
+): DisconnectablePrivilegedPlaceDatabase {
+  return new PrismaClient({
+    datasources: { db: { url: directUrl } },
+  });
+}
 
 /**
  * Parses, normalizes, and imports both immutable geographic datasets.
@@ -116,7 +140,11 @@ export function formatPlaceImportSummary(summary: PlaceImportSummary): string {
 export async function runPlaceImportCli(
   options: PlaceImportCliOptions = {},
 ): Promise<PlaceImportSummary> {
-  const database = options.database ?? new PrismaClient();
+  const database =
+    options.database ??
+    (options.createDatabase ?? createPrivilegedDatabase)(
+      requireDirectUrl(options.directUrl ?? process.env["DIRECT_URL"]),
+    );
   const runImport =
     options.runImport ?? ((importer) => importPlaceDatasets({ importer }));
   const writeSummary =

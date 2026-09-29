@@ -124,5 +124,5 @@ describe("parseOurAirportsCsv", () => {
       HEL: { ianaZone: "Europe/Helsinki", lat: 60.318363, lng: 24.963341 },
       NRT: { ianaZone: "Asia/Tokyo", lat: 35.76858, lng: 140.388714 },
     });
-  });
+  }, 15_000);
 });

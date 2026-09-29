@@ -112,6 +112,63 @@ describe("geographic place import runner", () => {
     expect(writeSummary).not.toHaveBeenCalled();
   });
 
+  it("constructs the import database from DIRECT_URL instead of DATABASE_URL", async () => {
+    const directUrl = "postgresql://postgres@privileged.invalid/cadence";
+    const disconnect = vi.fn(() => Promise.resolve());
+    const database = {
+      $transaction: vi.fn<PrivilegedPlaceDatabase["$transaction"]>(),
+      $disconnect: disconnect,
+    } as DisconnectablePrivilegedPlaceDatabase;
+    const createDatabase = vi.fn(() => database);
+    const summary: PlaceImportSummary = {
+      ourAirports: { normalized: 3, imported: 3 },
+      sncf: { normalized: 3, imported: 3 },
+    };
+    vi.stubEnv(
+      "DATABASE_URL",
+      "postgresql://rls_client@runtime.invalid/cadence",
+    );
+    vi.stubEnv("DIRECT_URL", directUrl);
+
+    try {
+      await expect(
+        runPlaceImportCli({
+          createDatabase,
+          runImport: () => Promise.resolve(summary),
+          writeSummary: vi.fn(),
+        }),
+      ).resolves.toEqual(summary);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    expect(createDatabase).toHaveBeenCalledExactlyOnceWith(directUrl);
+    expect(disconnect).toHaveBeenCalledOnce();
+  });
+
+  it("fails before database construction when DIRECT_URL is missing", async () => {
+    const createDatabase = vi.fn();
+    const runImport = vi.fn();
+    vi.stubEnv(
+      "DATABASE_URL",
+      "postgresql://rls_client@runtime.invalid/cadence",
+    );
+    vi.stubEnv("DIRECT_URL", "");
+
+    try {
+      await expect(
+        runPlaceImportCli({ createDatabase, runImport }),
+      ).rejects.toThrow(
+        "DIRECT_URL must be configured for the privileged place import",
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
+
+    expect(createDatabase).not.toHaveBeenCalled();
+    expect(runImport).not.toHaveBeenCalled();
+  });
+
   it("prints a concise per-source summary after a successful CLI run", async () => {
     const summary: PlaceImportSummary = {
       ourAirports: { normalized: 9_054, imported: 9_054 },
