@@ -1,14 +1,15 @@
-import type { PlaceRecord, RlsTransactionClient } from "../types";
+import type { Place } from "../../generated/prisma/client";
+import type { RlsTransactionClient } from "../types";
 
 export interface ILocationRepository {
   findByCoordinates(
     transaction: RlsTransactionClient,
     latitude: number,
     longitude: number,
-  ): Promise<PlaceRecord | null>;
+  ): Promise<Place | null>;
 
   findByIataCode(
     transaction: RlsTransactionClient,
     iataCode: string,
-  ): Promise<PlaceRecord | null>;
+  ): Promise<Place | null>;
 }

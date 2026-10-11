@@ -1,15 +1,7 @@
 import { Injectable } from "@nestjs/common";
+import type { Place } from "../../generated/prisma/client";
 import type { ILocationRepository } from "../interfaces/ILocationRepository";
-import type { PlaceRecord, RlsTransactionClient } from "../types";
-
-const selectPlaceRecord = {
-  id: true,
-  name: true,
-  city: true,
-  country: true,
-  ianaZone: true,
-  iataCode: true,
-} as const;
+import type { RlsTransactionClient } from "../types";
 
 @Injectable()
 export class PrismaLocationRepository implements ILocationRepository {
@@ -17,22 +9,29 @@ export class PrismaLocationRepository implements ILocationRepository {
     transaction: RlsTransactionClient,
     latitude: number,
     longitude: number,
-  ): Promise<PlaceRecord | null> {
+  ): Promise<Place | null> {
     return transaction.place.findFirst({
-      where: { lat: latitude, lng: longitude },
-      orderBy: { updatedAt: "desc" },
-      select: selectPlaceRecord,
+      where: {
+        lat: latitude,
+        lng: longitude,
+      },
+      orderBy: {
+        updatedAt: "desc",
+      },
     });
   }
 
   findByIataCode(
     transaction: RlsTransactionClient,
     iataCode: string,
-  ): Promise<PlaceRecord | null> {
+  ): Promise<Place | null> {
     return transaction.place.findFirst({
-      where: { iataCode },
-      orderBy: { updatedAt: "desc" },
-      select: selectPlaceRecord,
+      where: {
+        iataCode,
+      },
+      orderBy: {
+        updatedAt: "desc",
+      },
     });
   }
 }

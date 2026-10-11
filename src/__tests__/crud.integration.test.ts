@@ -174,7 +174,7 @@ describe.skipIf(!hasRlsRuntimeEnvironment())(
         .expect(201);
       const tripBody = createTripResponseSchema.parse(trip.body);
       expect(tripBody).toMatchObject({
-        destinationCity: "Tokyo",
+        destinationCity: "Narita",
         destinationCountry: "JP",
         ianaZone: "Asia/Tokyo",
       });

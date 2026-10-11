@@ -4,8 +4,8 @@ import {
   BookingType as PrismaBookingType,
   Prisma,
   VerificationStatus as PrismaVerificationStatus,
-  type Booking as PrismaBooking,
 } from "../../generated/prisma";
+import type { Booking } from "../../generated/prisma/client";
 import type {
   BookingPersistenceInput,
   BookingUpdatePersistenceInput,
@@ -13,14 +13,16 @@ import type {
 } from "../interfaces/IBookingRepository";
 import type {
   BookingDetailType,
-  BookingRecord,
   BookingStatusValue,
   RlsTransactionClient,
   VerificationStatusValue,
 } from "../types";
 import { rethrowPersistenceError } from "./prisma-errors";
 
-const PRISMA_BOOKING_TYPE: Record<BookingDetailType, PrismaBookingType> = {
+const PRISMA_BOOKING_TYPE: Record<
+  BookingDetailType,
+  PrismaBookingType
+> = {
   flight: PrismaBookingType.FLIGHT,
   train: PrismaBookingType.TRAIN,
   lodging: PrismaBookingType.ACCOMMODATION,
@@ -29,7 +31,10 @@ const PRISMA_BOOKING_TYPE: Record<BookingDetailType, PrismaBookingType> = {
   transport: PrismaBookingType.TRANSFER,
 };
 
-const PRISMA_BOOKING_STATUS: Record<BookingStatusValue, PrismaBookingStatus> = {
+const PRISMA_BOOKING_STATUS: Record<
+  BookingStatusValue,
+  PrismaBookingStatus
+> = {
   confirmed: PrismaBookingStatus.CONFIRMED,
   pending: PrismaBookingStatus.PENDING,
   cancelled: PrismaBookingStatus.CANCELLED,
@@ -43,44 +48,9 @@ const PRISMA_VERIFICATION_STATUS: Record<
   "needs-review": PrismaVerificationStatus.NEEDS_REVIEW,
 };
 
-const BOOKING_TYPE: Record<PrismaBookingType, BookingDetailType> = {
-  FLIGHT: "flight",
-  TRAIN: "train",
-  BUS: "transport",
-  FERRY: "transport",
-  CAR_RENTAL: "transport",
-  TRANSFER: "transport",
-  ACCOMMODATION: "lodging",
-  RESTAURANT: "restaurant",
-  ACTIVITY: "activity",
-  OTHER: "transport",
-};
-
-const BOOKING_STATUS: Record<PrismaBookingStatus, BookingStatusValue> = {
-  CONFIRMED: "confirmed",
-  PENDING: "pending",
-  CANCELLED: "cancelled",
-};
-
-const VERIFICATION_STATUS: Record<
-  PrismaVerificationStatus,
-  VerificationStatusValue
-> = {
-  VERIFIED: "verified",
-  NEEDS_REVIEW: "needs-review",
-};
-
-function toBookingRecord(record: PrismaBooking | null): BookingRecord | null {
-  if (record === null) return null;
-  return {
-    ...record,
-    type: BOOKING_TYPE[record.type],
-    status: BOOKING_STATUS[record.status],
-    verificationStatus: VERIFICATION_STATUS[record.verificationStatus],
-    extractionConfidence: record.extractionConfidence?.toNumber() ?? null,
-  };
-}
-
+/**
+ * Converts validated booking details into a Prisma-compatible JSON value.
+ */
 function jsonValue(
   value: BookingPersistenceInput["details"],
 ): Prisma.InputJsonValue {
@@ -92,9 +62,9 @@ export class PrismaBookingRepository implements IBookingRepository {
   async create(
     transaction: RlsTransactionClient,
     input: BookingPersistenceInput,
-  ): Promise<BookingRecord> {
+  ): Promise<Booking> {
     try {
-      const record = await transaction.booking.create({
+      return await transaction.booking.create({
         data: {
           tripId: input.tripId,
           type: PRISMA_BOOKING_TYPE[input.type],
@@ -115,7 +85,6 @@ export class PrismaBookingRepository implements IBookingRepository {
           rawIngestionId: input.rawIngestionId,
         },
       });
-      return toBookingRecord(record)!;
     } catch (error) {
       rethrowPersistenceError(error);
     }
@@ -124,23 +93,24 @@ export class PrismaBookingRepository implements IBookingRepository {
   findAll(
     transaction: RlsTransactionClient,
     tripId: string,
-  ): Promise<BookingRecord[]> {
-    return transaction.booking
-      .findMany({
-        where: { tripId },
-        orderBy: { startAt: "asc" },
-      })
-      .then((records) => records.map((record) => toBookingRecord(record)!));
+  ): Promise<Booking[]> {
+    return transaction.booking.findMany({
+      where: { tripId },
+      orderBy: { startAt: "asc" },
+    });
   }
 
   findById(
     transaction: RlsTransactionClient,
     tripId: string,
     bookingId: string,
-  ): Promise<BookingRecord | null> {
-    return transaction.booking
-      .findFirst({ where: { id: bookingId, tripId } })
-      .then(toBookingRecord);
+  ): Promise<Booking | null> {
+    return transaction.booking.findFirst({
+      where: {
+        id: bookingId,
+        tripId,
+      },
+    });
   }
 
   async update(
@@ -148,19 +118,42 @@ export class PrismaBookingRepository implements IBookingRepository {
     tripId: string,
     bookingId: string,
     input: BookingUpdatePersistenceInput,
-  ): Promise<BookingRecord | null> {
-    const { details, status, type, verificationStatus, ...rest } = input;
+  ): Promise<Booking | null> {
+    const {
+      details,
+      status,
+      type,
+      verificationStatus,
+      ...rest
+    } = input;
 
     try {
       const updated = await transaction.booking.updateMany({
-        where: { id: bookingId, tripId },
+        where: {
+          id: bookingId,
+          tripId,
+        },
         data: {
           ...rest,
-          ...(details === undefined ? {} : { details: jsonValue(details) }),
+
+          ...(details === undefined
+            ? {}
+            : {
+                details: jsonValue(details),
+              }),
+
           ...(status === undefined
             ? {}
-            : { status: PRISMA_BOOKING_STATUS[status] }),
-          ...(type === undefined ? {} : { type: PRISMA_BOOKING_TYPE[type] }),
+            : {
+                status: PRISMA_BOOKING_STATUS[status],
+              }),
+
+          ...(type === undefined
+            ? {}
+            : {
+                type: PRISMA_BOOKING_TYPE[type],
+              }),
+
           ...(verificationStatus === undefined
             ? {}
             : {
@@ -169,12 +162,17 @@ export class PrismaBookingRepository implements IBookingRepository {
               }),
         },
       });
+
       if (updated.count === 0) {
         return null;
       }
-      return transaction.booking
-        .findFirst({ where: { id: bookingId, tripId } })
-        .then(toBookingRecord);
+
+      return transaction.booking.findFirst({
+        where: {
+          id: bookingId,
+          tripId,
+        },
+      });
     } catch (error) {
       rethrowPersistenceError(error);
     }
@@ -186,8 +184,12 @@ export class PrismaBookingRepository implements IBookingRepository {
     bookingId: string,
   ): Promise<boolean> {
     const deleted = await transaction.booking.deleteMany({
-      where: { id: bookingId, tripId },
+      where: {
+        id: bookingId,
+        tripId,
+      },
     });
+
     return deleted.count > 0;
   }
 }

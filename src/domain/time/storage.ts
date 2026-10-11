@@ -12,6 +12,16 @@ function requireValid(value: DateTime, context: string): DateTime {
   return value;
 }
 
+/**
+ * Validates that the provided string represents a valid IANA time zone.
+ *
+ * Luxon attempts to create a DateTime using the supplied zone. If the zone
+ * is invalid, requireValid throws an error instead of allowing an invalid
+ * timezone to propagate through the application.
+ *
+ * @param ianaZone IANA time zone identifier to validate, such as "Europe/Paris".
+ * @throws Error When the supplied value is not a valid IANA time zone.
+ */
 export function assertIanaZone(ianaZone: string): void {
   requireValid(
     DateTime.now().setZone(ianaZone),

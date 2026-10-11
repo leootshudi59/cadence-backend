@@ -113,11 +113,6 @@ enum PlaceCategory {
   OTHER
 }
 
-enum PlaceProvider {
-  OSM
-  MANUAL
-}
-
 enum TravelMode {
   FOOT
   CAR
@@ -407,8 +402,6 @@ model Place {
   ianaZone             String        @map("iana_zone")
   iataCode             String?       @map("iata_code")
   category             PlaceCategory @map("category")
-  provider             PlaceProvider @map("provider")
-  providerPlaceId      String?       @map("provider_place_id")
   openingHours         Json?         @map("opening_hours") @db.JsonB
   seasonalClosure      Json?         @map("seasonal_closure") @db.JsonB
   requiresBooking      Boolean?      @map("requires_booking")
@@ -418,15 +411,51 @@ model Place {
   createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt            DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  trips         Trip[]     @relation("TripDestination")
-  bookingStarts Booking[]  @relation("BookingStartPlace")
-  bookingEnds   Booking[]  @relation("BookingEndPlace")
-  routeLegsFrom RouteLeg[] @relation("RouteLegFrom")
-  routeLegsTo   RouteLeg[] @relation("RouteLegTo")
+  trips         Trip[]        @relation("TripDestination")
+  bookingStarts Booking[]     @relation("BookingStartPlace")
+  bookingEnds   Booking[]     @relation("BookingEndPlace")
+  routeLegsFrom RouteLeg[]    @relation("RouteLegFrom")
+  routeLegsTo   RouteLeg[]    @relation("RouteLegTo")
+  placeSources  PlaceSource[]
 
-  @@unique([provider, providerPlaceId], map: "places_provider_provider_place_id_key")
   @@index([iataCode], map: "places_iata_code_idx")
   @@map("places")
+}
+
+model DataSource {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  code      String   @unique(map: "data_sources_code_key") @map("code")
+  name      String   @map("name")
+  country   String?  @map("country") @db.Char(2)
+  sourceUrl String?  @map("source_url")
+  license   String?  @map("license")
+  active    Boolean  @default(true) @map("active")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  placeSources PlaceSource[]
+
+  @@map("data_sources")
+}
+
+model PlaceSource {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @map("id") @db.Uuid
+  placeId         String    @map("place_id") @db.Uuid
+  dataSourceId    String    @map("data_source_id") @db.Uuid
+  externalId      String    @map("external_id")
+  externalCode    String?   @map("external_code")
+  rawData         Json?     @map("raw_data") @db.JsonB
+  sourceUpdatedAt DateTime? @map("source_updated_at") @db.Timestamptz(6)
+  lastSyncedAt    DateTime  @map("last_synced_at") @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  place      Place      @relation(fields: [placeId], references: [id], onDelete: Cascade)
+  dataSource DataSource @relation(fields: [dataSourceId], references: [id], onDelete: Restrict)
+
+  @@unique([dataSourceId, externalId], map: "place_sources_data_source_id_external_id_key")
+  @@index([placeId], map: "place_sources_place_id_idx")
+  @@map("place_sources")
 }
 
 model RouteLeg {

@@ -1,21 +1,26 @@
 import { Injectable } from "@nestjs/common";
+import type { BookingTraveler } from "../../generated/prisma/client";
 import type {
   BookingTravelerPersistenceInput,
   BookingTravelerUpdatePersistenceInput,
   IBookingTravelerRepository,
   NormalizedBookingTraveler,
 } from "../interfaces/IBookingTravelerRepository";
-import type { BookingTravelerRecord, RlsTransactionClient } from "../types";
+import type { RlsTransactionClient } from "../types";
 import { rethrowPersistenceError } from "./prisma-errors";
 
 @Injectable()
-export class PrismaBookingTravelerRepository implements IBookingTravelerRepository {
+export class PrismaBookingTravelerRepository
+  implements IBookingTravelerRepository
+{
   async create(
     transaction: RlsTransactionClient,
     input: BookingTravelerPersistenceInput,
-  ): Promise<BookingTravelerRecord> {
+  ): Promise<BookingTraveler> {
     try {
-      return await transaction.bookingTraveler.create({ data: input });
+      return await transaction.bookingTraveler.create({
+        data: input,
+      });
     } catch (error) {
       rethrowPersistenceError(error);
     }
@@ -24,7 +29,7 @@ export class PrismaBookingTravelerRepository implements IBookingTravelerReposito
   findAll(
     transaction: RlsTransactionClient,
     bookingId: string,
-  ): Promise<BookingTravelerRecord[]> {
+  ): Promise<BookingTraveler[]> {
     return transaction.bookingTraveler.findMany({
       where: { bookingId },
       orderBy: { id: "asc" },
@@ -35,9 +40,12 @@ export class PrismaBookingTravelerRepository implements IBookingTravelerReposito
     transaction: RlsTransactionClient,
     bookingId: string,
     bookingTravelerId: string,
-  ): Promise<BookingTravelerRecord | null> {
+  ): Promise<BookingTraveler | null> {
     return transaction.bookingTraveler.findFirst({
-      where: { id: bookingTravelerId, bookingId },
+      where: {
+        id: bookingTravelerId,
+        bookingId,
+      },
     });
   }
 
@@ -46,17 +54,25 @@ export class PrismaBookingTravelerRepository implements IBookingTravelerReposito
     bookingId: string,
     bookingTravelerId: string,
     input: BookingTravelerUpdatePersistenceInput,
-  ): Promise<BookingTravelerRecord | null> {
+  ): Promise<BookingTraveler | null> {
     try {
       const updated = await transaction.bookingTraveler.updateMany({
-        where: { id: bookingTravelerId, bookingId },
+        where: {
+          id: bookingTravelerId,
+          bookingId,
+        },
         data: input,
       });
+
       if (updated.count === 0) {
         return null;
       }
+
       return transaction.bookingTraveler.findFirst({
-        where: { id: bookingTravelerId, bookingId },
+        where: {
+          id: bookingTravelerId,
+          bookingId,
+        },
       });
     } catch (error) {
       rethrowPersistenceError(error);
@@ -69,8 +85,12 @@ export class PrismaBookingTravelerRepository implements IBookingTravelerReposito
     bookingTravelerId: string,
   ): Promise<boolean> {
     const deleted = await transaction.bookingTraveler.deleteMany({
-      where: { id: bookingTravelerId, bookingId },
+      where: {
+        id: bookingTravelerId,
+        bookingId,
+      },
     });
+
     return deleted.count > 0;
   }
 
@@ -102,7 +122,9 @@ export class PrismaBookingTravelerRepository implements IBookingTravelerReposito
             travelerId: traveler.travelerId,
             seat: traveler.seat,
           },
-          update: { seat: traveler.seat },
+          update: {
+            seat: traveler.seat,
+          },
         });
       }
     } catch (error) {

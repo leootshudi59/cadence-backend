@@ -1,7 +1,7 @@
 import type { StoredDate } from "../../domain/time";
+import type { Trip } from "../../generated/prisma/client";
 import type {
   RlsTransactionClient,
-  TripRecord,
   TripStatusValue,
 } from "../types";
 
@@ -29,20 +29,23 @@ export interface ITripRepository {
   create(
     transaction: RlsTransactionClient,
     input: TripPersistenceInput,
-  ): Promise<TripRecord>;
+  ): Promise<Trip>;
 
-  findAll(transaction: RlsTransactionClient): Promise<TripRecord[]>;
+  findAll(transaction: RlsTransactionClient): Promise<Trip[]>;
 
   findById(
     transaction: RlsTransactionClient,
     tripId: string,
-  ): Promise<TripRecord | null>;
+  ): Promise<Trip | null>;
 
   update(
     transaction: RlsTransactionClient,
     tripId: string,
     input: TripUpdatePersistenceInput,
-  ): Promise<TripRecord | null>;
+  ): Promise<Trip | null>;
 
-  delete(transaction: RlsTransactionClient, tripId: string): Promise<boolean>;
+  delete(
+    transaction: RlsTransactionClient,
+    tripId: string,
+  ): Promise<boolean>;
 }

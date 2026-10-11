@@ -1,4 +1,5 @@
-import type { BookingTravelerRecord, RlsTransactionClient } from "../types";
+import type { BookingTraveler } from "../../generated/prisma/client";
+import type { RlsTransactionClient } from "../types";
 
 export interface BookingTravelerPersistenceInput {
   bookingId: string;
@@ -20,25 +21,25 @@ export interface IBookingTravelerRepository {
   create(
     transaction: RlsTransactionClient,
     input: BookingTravelerPersistenceInput,
-  ): Promise<BookingTravelerRecord>;
+  ): Promise<BookingTraveler>;
 
   findAll(
     transaction: RlsTransactionClient,
     bookingId: string,
-  ): Promise<BookingTravelerRecord[]>;
+  ): Promise<BookingTraveler[]>;
 
   findById(
     transaction: RlsTransactionClient,
     bookingId: string,
     bookingTravelerId: string,
-  ): Promise<BookingTravelerRecord | null>;
+  ): Promise<BookingTraveler | null>;
 
   update(
     transaction: RlsTransactionClient,
     bookingId: string,
     bookingTravelerId: string,
     input: BookingTravelerUpdatePersistenceInput,
-  ): Promise<BookingTravelerRecord | null>;
+  ): Promise<BookingTraveler | null>;
 
   delete(
     transaction: RlsTransactionClient,

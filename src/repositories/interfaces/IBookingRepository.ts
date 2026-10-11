@@ -1,8 +1,8 @@
 import type { BookingDetailsStored } from "../../dtos/booking";
 import type { StoredDate } from "../../domain/time";
+import type { Booking } from "../../generated/prisma/client";
 import type {
   BookingDetailType,
-  BookingRecord,
   BookingStatusValue,
   RlsTransactionClient,
   VerificationStatusValue,
@@ -35,25 +35,25 @@ export interface IBookingRepository {
   create(
     transaction: RlsTransactionClient,
     input: BookingPersistenceInput,
-  ): Promise<BookingRecord>;
+  ): Promise<Booking>;
 
   findAll(
     transaction: RlsTransactionClient,
     tripId: string,
-  ): Promise<BookingRecord[]>;
+  ): Promise<Booking[]>;
 
   findById(
     transaction: RlsTransactionClient,
     tripId: string,
     bookingId: string,
-  ): Promise<BookingRecord | null>;
+  ): Promise<Booking | null>;
 
   update(
     transaction: RlsTransactionClient,
     tripId: string,
     bookingId: string,
     input: BookingUpdatePersistenceInput,
-  ): Promise<BookingRecord | null>;
+  ): Promise<Booking | null>;
 
   delete(
     transaction: RlsTransactionClient,
