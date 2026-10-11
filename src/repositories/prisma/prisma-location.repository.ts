@@ -27,6 +27,7 @@ export class PrismaLocationRepository implements ILocationRepository {
   ): Promise<Place | null> {
     return transaction.place.findFirst({
       where: {
+        category: "AIRPORT",
         iataCode,
       },
       orderBy: {

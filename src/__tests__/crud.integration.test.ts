@@ -178,6 +178,7 @@ describe.skipIf(!hasRlsRuntimeEnvironment())(
         destinationCountry: "JP",
         ianaZone: "Asia/Tokyo",
       });
+      expect(tripBody.placeId).not.toBeNull();
       tripId = tripBody.id;
 
       const participant = await authorization(
@@ -216,6 +217,34 @@ describe.skipIf(!hasRlsRuntimeEnvironment())(
         throw new Error("Expected stored flight details");
       }
       expect(bookingBody.details.segments).toHaveLength(2);
+      expect(bookingBody.startPlaceId).not.toBeNull();
+      expect(bookingBody.endPlaceId).not.toBeNull();
+      expect(bookingBody.details.segments).toMatchObject([
+        {
+          departure: {
+            airportName: "Charles de Gaulle International Airport",
+            city: "Paris (Roissy-en-France, Val-d'Oise)",
+            ianaZone: "Europe/Paris",
+          },
+          arrival: {
+            airportName: "Helsinki Vantaa Airport",
+            city: "Helsinki (Vantaa)",
+            ianaZone: "Europe/Helsinki",
+          },
+        },
+        {
+          departure: {
+            airportName: "Helsinki Vantaa Airport",
+            city: "Helsinki (Vantaa)",
+            ianaZone: "Europe/Helsinki",
+          },
+          arrival: {
+            airportName: "Narita International Airport",
+            city: "Narita",
+            ianaZone: "Asia/Tokyo",
+          },
+        },
+      ]);
 
       const readTrip = await authorization(
         request(httpServer(app)).get(`/trips/${tripId}`),
