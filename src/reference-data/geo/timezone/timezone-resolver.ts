@@ -24,6 +24,18 @@ export class TimezoneResolutionError extends Error {
   }
 }
 
+export class AmbiguousTimezoneError extends TimezoneResolutionError {
+  readonly candidates: readonly string[];
+
+  constructor(lat: number, lng: number, candidates: readonly string[]) {
+    super(
+      `Multiple IANA timezones found for coordinates (${lat}, ${lng}): ${candidates.join(", ")}`,
+    );
+    this.name = "AmbiguousTimezoneError";
+    this.candidates = [...candidates];
+  }
+}
+
 export function assertValidCoordinates(lat: number, lng: number): void {
   if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
     throw new InvalidCoordinatesError("Coordinates must be finite numbers");
@@ -53,9 +65,7 @@ export class GeoTzTimezoneResolver implements TimezoneResolver {
     }
 
     if (candidates.length > 1) {
-      throw new TimezoneResolutionError(
-        `Multiple IANA timezones found for coordinates (${lat}, ${lng}): ${candidates.join(", ")}`,
-      );
+      throw new AmbiguousTimezoneError(lat, lng, candidates);
     }
 
     const candidate = candidates[0];

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  AmbiguousTimezoneError,
   GeoTzTimezoneResolver,
   InvalidCoordinatesError,
   TimezoneResolutionError,
@@ -38,6 +39,15 @@ describe("GeoTzTimezoneResolver", () => {
     expect(() => resolver.resolve(43.84, 87.53)).toThrow(
       /Multiple IANA timezones/,
     );
+    try {
+      resolver.resolve(43.84, 87.53);
+    } catch (error) {
+      expect(error).toBeInstanceOf(AmbiguousTimezoneError);
+      expect((error as AmbiguousTimezoneError).candidates).toEqual([
+        "Asia/Shanghai",
+        "Asia/Urumqi",
+      ]);
+    }
   });
 
   it("accepts duplicate copies of one candidate", () => {

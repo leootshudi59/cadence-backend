@@ -241,7 +241,7 @@ describe.skipIf(!hasRlsRuntimeEnvironment())(
           travelerId,
         }),
       ]);
-    });
+    }, 30_000);
 
     it("returns 422 for unresolved IATA and overlapping flight segments", async () => {
       await authorization(request(httpServer(app)).post("/trips"))

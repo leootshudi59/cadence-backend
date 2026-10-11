@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
-import type { TimezoneResolver } from "../../timezone/timezone-resolver";
+import {
+  GeoTzTimezoneResolver,
+  type TimezoneResolver,
+} from "../../timezone/timezone-resolver";
 import {
   normalizeOurAirportsRow,
   normalizeOurAirportsRows,
+  normalizeOurAirportsRowsWithRejections,
 } from "./ourairports.normalizer";
 import {
   selectOurAirportsRowsWithIata,
@@ -95,5 +99,70 @@ describe("normalizeOurAirportsRow", () => {
     expect(normalized.map((place) => place.source.externalId)).toEqual([
       "LFPG",
     ]);
+  });
+
+  it("keeps a unique resolver result even when an override is present", () => {
+    const normalized = normalizeOurAirportsRow(iataRow(), parisResolver, {
+      byIdent: { LFPG: "Asia/Shanghai" },
+      byIata: {},
+    });
+
+    expect(normalized.ianaZone).toBe("Europe/Paris");
+  });
+
+  it("rejects ambiguous rows without a verified override", () => {
+    const resolver = new GeoTzTimezoneResolver(() => [
+      "Asia/Shanghai",
+      "Asia/Urumqi",
+    ]);
+    const report = normalizeOurAirportsRowsWithRejections(
+      [row({ ident: "CN-0237", iata_code: "HQL" })],
+      resolver,
+    );
+
+    expect(report).toEqual({
+      eligible: 1,
+      normalized: [],
+      rejected: [
+        {
+          externalId: "CN-0237",
+          iataCode: "HQL",
+          candidates: ["Asia/Shanghai", "Asia/Urumqi"],
+        },
+      ],
+    });
+  });
+
+  it.each([
+    [{ byIdent: { "CN-0237": "Asia/Shanghai" }, byIata: {} }, "Asia/Shanghai"],
+    [{ byIdent: {}, byIata: { HQL: "Asia/Urumqi" } }, "Asia/Urumqi"],
+  ] as const)("uses a matching explicit override", (overrides, expected) => {
+    const resolver = new GeoTzTimezoneResolver(() => [
+      "Asia/Shanghai",
+      "Asia/Urumqi",
+    ]);
+
+    expect(
+      normalizeOurAirportsRow(
+        iataRow({ ident: "CN-0237", iata_code: "HQL" }),
+        resolver,
+        overrides,
+      ).ianaZone,
+    ).toBe(expected);
+  });
+
+  it("fails on an override that is not a resolver candidate", () => {
+    const resolver = new GeoTzTimezoneResolver(() => [
+      "Asia/Shanghai",
+      "Asia/Urumqi",
+    ]);
+
+    expect(() =>
+      normalizeOurAirportsRowsWithRejections(
+        [row({ ident: "CN-0237", iata_code: "HQL" })],
+        resolver,
+        { byIdent: { "CN-0237": "Europe/Paris" }, byIata: {} },
+      ),
+    ).toThrow(/Invalid verified timezone override/);
   });
 });

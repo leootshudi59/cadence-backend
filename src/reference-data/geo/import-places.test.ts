@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { GeoTzTimezoneResolver } from "./timezone/timezone-resolver";
 import type { NormalizedPlace } from "./normalized-place";
 import type {
   PlaceImportResult,
@@ -89,8 +90,78 @@ describe("geographic place import runner", () => {
     });
     expect(resolveTimezone).toHaveBeenCalledTimes(2);
     expect(summary).toEqual({
-      ourAirports: { normalized: 1, imported: 1 },
+      ourAirports: { eligible: 1, normalized: 1, rejected: 0, imported: 1 },
       sncf: { normalized: 1, imported: 1 },
+    });
+  });
+
+  it("reports ambiguous airports and imports only normalized places", async () => {
+    const importedBatches: NormalizedPlace[][] = [];
+    const importer = {
+      importPlaces: (places: readonly NormalizedPlace[]) => {
+        importedBatches.push([...places]);
+        return Promise.resolve(importResults(places));
+      },
+    };
+    const ambiguousCsv = [
+      ourAirportsCsv,
+      "CN-0237,Tashikuergan Hongqilafu Airport,37.661333,75.288877,CN,Tashikuergan,HQL",
+    ].join("\n");
+    const readCsv = (path: string) =>
+      Promise.resolve(path === OURAIRPORTS_CSV_PATH ? ambiguousCsv : sncfCsv);
+    const timezoneResolver = new GeoTzTimezoneResolver((lat) =>
+      lat === 37.661333 ? ["Asia/Shanghai", "Asia/Urumqi"] : ["Europe/Paris"],
+    );
+
+    const summary = await importPlaceDatasets({
+      importer,
+      readCsv,
+      timezoneResolver,
+    });
+
+    expect(importedBatches[0]?.map((place) => place.source.externalId)).toEqual(
+      ["LFPG"],
+    );
+    expect(summary).toEqual({
+      ourAirports: { eligible: 2, normalized: 1, rejected: 1, imported: 1 },
+      sncf: { normalized: 1, imported: 1 },
+    });
+  });
+
+  it("passes large source datasets to the importer in bounded concurrent batches", async () => {
+    const airportRows = Array.from({ length: 451 }, (_, index) => {
+      const iata = `A${index.toString(36).toUpperCase().padStart(2, "0")}`;
+      return `TEST-${index},Airport ${index},48,2,FR,Paris,${iata}`;
+    });
+    const csv = [ourAirportsCsv.split("\n")[0], ...airportRows].join("\n");
+    const importedBatchSizes: number[] = [];
+    let activeBatches = 0;
+    let peakActiveBatches = 0;
+    const importer = {
+      importPlaces: async (places: readonly NormalizedPlace[]) => {
+        importedBatchSizes.push(places.length);
+        activeBatches += 1;
+        peakActiveBatches = Math.max(peakActiveBatches, activeBatches);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        activeBatches -= 1;
+        return importResults(places);
+      },
+    };
+
+    const summary = await importPlaceDatasets({
+      importer,
+      readCsv: (path) =>
+        Promise.resolve(path === OURAIRPORTS_CSV_PATH ? csv : sncfCsv),
+      timezoneResolver: { resolve: () => "Europe/Paris" },
+    });
+
+    expect(importedBatchSizes).toEqual([...Array<number>(9).fill(50), 1, 1]);
+    expect(peakActiveBatches).toBe(8);
+    expect(summary.ourAirports).toEqual({
+      eligible: 451,
+      normalized: 451,
+      rejected: 0,
+      imported: 451,
     });
   });
 
@@ -121,7 +192,7 @@ describe("geographic place import runner", () => {
     } as DisconnectablePrivilegedPlaceDatabase;
     const createDatabase = vi.fn(() => database);
     const summary: PlaceImportSummary = {
-      ourAirports: { normalized: 3, imported: 3 },
+      ourAirports: { eligible: 3, normalized: 3, rejected: 0, imported: 3 },
       sncf: { normalized: 3, imported: 3 },
     };
     vi.stubEnv(
@@ -171,7 +242,12 @@ describe("geographic place import runner", () => {
 
   it("prints a concise per-source summary after a successful CLI run", async () => {
     const summary: PlaceImportSummary = {
-      ourAirports: { normalized: 9_054, imported: 9_054 },
+      ourAirports: {
+        eligible: 9_054,
+        normalized: 9_023,
+        rejected: 31,
+        imported: 9_023,
+      },
       sncf: { normalized: 2_782, imported: 2_782 },
     };
     const disconnect = vi.fn(() => Promise.resolve());
@@ -193,7 +269,7 @@ describe("geographic place import runner", () => {
       formatPlaceImportSummary(summary),
     );
     expect(writeSummary).toHaveBeenCalledWith(
-      "Place import complete: OurAirports normalized=9054 imported=9054; SNCF normalized=2782 imported=2782.",
+      "Place import complete: OurAirports eligible=9054 normalized=9023 rejected=31 imported=9023; SNCF normalized=2782 imported=2782.",
     );
     expect(disconnect).toHaveBeenCalledOnce();
   });
